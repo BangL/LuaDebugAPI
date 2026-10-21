@@ -1,9 +1,7 @@
 # LuaDebugAPI
 
 Live debug API for **RAID: World War II** and **PAYDAY 2** (both DIESEL, SuperBLT).
-Executes Lua code in the running game session and returns the result. Transport is
-file IPC, not a socket: the game ships no LuaSocket and the hook DLL cannot be built
-on Linux.
+Executes Lua code in the running game session and returns the result via file IPC.
 
 **Warning:** executes arbitrary code without any authentication. Any process with write
 access to `io/` can control the game. For development only.
