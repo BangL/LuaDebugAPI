@@ -1,0 +1,10 @@
+{
+	"name": "LuaDebugAPI",
+	"description": "Live debug API: executes Lua from io/cmd.lua in the running session and writes the result to io/res.txt",
+	"author": "BangL",
+	"version": "0.1",
+	"priority": 1000,
+	"hooks": [
+		{ "hook_id": "lib/setups/setup", "script_path": "LuaDebugAPI.lua" }
+	]
+}

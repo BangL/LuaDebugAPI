@@ -1,0 +1,13 @@
+#!/bin/sh
+# usage: ldb '<lua code>' | ldb -f file.lua   (timeout via LDB_TIMEOUT, default 10s)
+d="$(cd "$(dirname "$0")" && pwd)/io"
+if [ "$1" = "-f" ]; then cp "$2" "$d/cmd.tmp"; else printf '%s' "$1" > "$d/cmd.tmp"; fi
+rm -f "$d/res.txt"
+mv "$d/cmd.tmp" "$d/cmd.lua"
+n=$(( ${LDB_TIMEOUT:-10} * 20 ))
+while [ $n -gt 0 ]; do
+	if [ -f "$d/res.txt" ]; then cat "$d/res.txt"; echo; rm -f "$d/res.txt"; exit 0; fi
+	sleep 0.05; n=$((n-1))
+done
+rm -f "$d/cmd.lua"
+echo "TIMEOUT (Spiel laeuft nicht / Mod nicht geladen?)" >&2; exit 1

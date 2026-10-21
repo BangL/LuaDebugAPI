@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<mod name="LuaDebugAPI"
+	description="Live debug API: executes Lua from io/cmd.lua in the running session and writes the result to io/res.txt"
+	priority="1000"
+	author="BangL"
+	color="60 160 255"
+	version="0.1">
+
+	<hooks>
+		<group script_path="LuaDebugAPI.lua">
+			<post hook_id="lib/setups/setup"/>
+		</group>
+	</hooks>
+</mod>
