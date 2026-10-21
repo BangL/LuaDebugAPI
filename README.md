@@ -1,82 +1,92 @@
 # LuaDebugAPI
 
-Live-Debug-API fuer RAID: WW2. Fuehrt Lua-Code in der laufenden Spielsession aus
-und liefert das Ergebnis zurueck. Transport ist Datei-IPC (kein Socket: das Spiel
-hat kein LuaSocket, die Hook-DLL ist unter Linux nicht baubar).
+Live debug API for **RAID: World War II** and **PAYDAY 2** (both DIESEL, SuperBLT).
+Executes Lua code in the running game session and returns the result. Transport is
+file IPC, not a socket: the game ships no LuaSocket and the hook DLL cannot be built
+on Linux.
 
-**Achtung:** fuehrt ungefiltert beliebigen Code aus, ohne Authentifizierung. Jeder
-Prozess mit Schreibzugriff auf `io/` kann das Spiel steuern. Nur fuer Entwicklung.
+**Warning:** executes arbitrary code without any authentication. Any process with write
+access to `io/` can control the game. For development only.
 
-## Benutzung
+## Usage
 
 ```
 mods/LuaDebugAPI/ldb '<lua code>'
 mods/LuaDebugAPI/ldb -f script.lua
-LDB_TIMEOUT=30 mods/LuaDebugAPI/ldb '...'   # Timeout in s, Default 10
+LDB_TIMEOUT=30 mods/LuaDebugAPI/ldb '...'   # timeout in s, default 10
 ```
 
-Beispiele:
+Examples:
 
 ```
 ldb 'game_state_machine:current_state_name()'   # -> OK "menu_main"
 ldb 'managers.player:player_unit():position()'
 ldb 'out("hi"); log("x"); return {a=1}, "s"'
-ldb 'DevTools:reset_menu()'                      # Relua (siehe unten)
+ldb 'DevTools:reset_menu()'                      # Lua reload, RAID + DevTools-RAID (see below)
 ```
 
-## Protokoll
+`ldb` is a POSIX shell script. On Windows, write `io/cmd.lua` and read `io/res.txt`
+yourself (see Protocol).
 
-1. Client schreibt `io/cmd.lua` (atomar: erst `cmd.tmp`, dann `mv`).
-2. Der Mod pollt alle 0,05 s (Post-Hook auf `Setup:update`, laeuft in Menue und
-   Spiel), liest und loescht `cmd.lua`, fuehrt den Chunk aus.
-3. Er schreibt `io/res.txt` (atomar via `res.txt.tmp`). Der Client liest und loescht sie.
+## Protocol
 
-Ein Befehl nach dem anderen: `ldb` loescht vor dem Senden eine alte `res.txt`.
+1. The client writes `io/cmd.lua` (atomically: write `cmd.tmp`, then `mv`).
+2. The mod polls every 0.05 s (post-hook on `Setup:update`, runs in menu and in game),
+   reads and deletes `cmd.lua` and executes the chunk.
+3. It writes `io/res.txt` (atomically via `res.txt.tmp`). The client reads and deletes it.
 
-## Ausfuehrung
+One command at a time: `ldb` deletes a stale `res.txt` before sending.
 
-- Code wird zuerst als `return <code>` geladen (Ausdruck), sonst als normaler Chunk.
-- Umgebung: `_G` (Lese- und Schreibzugriffe gehen auf `_G`), plus `out(...)`.
-- `out(...)` und `log(...)` waehrend des Befehls werden ins Ergebnis uebernommen
-  (`log` zusaetzlich normal ins BLT-Log).
-- Ausfuehrung ueber `blt.xpcall` (Traceback via `debug.traceback`, falls vorhanden),
-  der aeussere Schutz ueber `blt.pcall`. Globales `xpcall` ist `nil` im Spiel,
-  ungefangene Fehler im `update` crashen die Engine.
+## Execution
 
-## Ergebnisformat
+- The code is first loaded as `return <code>` (expression), otherwise as a plain chunk.
+- Environment: `_G` (reads and writes go to `_G`), plus `out(...)`.
+- `out(...)` and `log(...)` calls during the command are included in the result
+  (`log` still goes to the BLT log as usual).
+- Runs through `blt.xpcall` (traceback via `debug.traceback` if available), outer guard
+  through `blt.pcall`; both fall back to `xpcall`/`pcall` if `blt.*` is missing.
+  Note: the global `xpcall` is `nil` in RAID, and an uncaught error in `update` crashes
+  the engine.
 
-Zeilen mit `out`/`[log]` zuerst, dann die letzte Zeile:
+## Result format
 
-- `OK <wert>, <wert>, ...` - Rueckgabewerte (`nil` wird als `nil` ausgegeben)
-- `ERR <meldung>` (+ Traceback) - Fehler im Befehl
-- `ERR syntax: ...` - Chunk nicht ladbar
-- `ERR internal: ...` - Fehler im Mod selbst
+`out`/`[log]` lines first, then the final line:
 
-Serialisierung: Tabellen bis Tiefe 3, max. 200 Eintraege je Tabelle, Zyklen als
-`<cycle>`, Userdata (Vector3, Unit, Idstring, ...) per `tostring`. Gesamtausgabe
-max. 200000 Zeichen (`<truncated>`). Limits in `LuaDebugAPI.lua` (`L.max_*`).
+- `OK <value>, <value>, ...` - return values (`nil` is printed as `nil`)
+- `ERR <message>` (+ traceback) - error in the command
+- `ERR syntax: ...` - chunk could not be loaded
+- `ERR internal: ...` - error in the mod itself
 
-## Lua-Reload
+Serialization: tables up to depth 3, at most 200 entries per table, cycles as
+`<cycle>`, userdata (Vector3, Unit, Idstring, ...) via `tostring`. Total output is
+capped at 200000 characters (`<truncated>`). Limits: `L.max_*` in `LuaDebugAPI.lua`.
 
-Beim Reload (`DevTools:reset_menu()`, `reset_server()`, F10) entsteht ein neuer
-Lua-State. Der Befehl kann ohne Antwort bleiben (Timeout) oder bekommt sie noch vor dem
-State-Wechsel (beim Test: `OK `). Der Mod laedt sich neu und ist nach wenigen Sekunden wieder erreichbar:
+## Lua reload
+
+A reload (`DevTools:reset_menu()`, `reset_server()`, F10 with DevTools-RAID) creates a
+new Lua state. The triggering command may get no answer (timeout) or an answer sent
+before the state switch (`OK ` in testing). The mod reloads itself and is reachable
+again after a few seconds:
 
 ```
 ldb 'DevTools:reset_menu()'; until ldb '1' 2>/dev/null; do :; done
 ```
 
-## PD2
+## Games
 
-Derselbe Mod-Ordner laeuft (ungetestet) auch unter PAYDAY 2: `mod.txt` liegt neben
-`supermod.xml`, `blt.xpcall`/`blt.pcall` fallen auf `xpcall`/`pcall` zurueck. Die
-Relua-Beispiele (`DevTools:reset_menu()`) sind RAID-spezifisch.
+| Game | Definition | Status |
+| --- | --- | --- |
+| RAID: WW2 | `supermod.xml` | tested: expressions, `out`/`log`, tables, `nil`, errors, Lua reload |
+| PAYDAY 2 | `mod.txt` (`supermod.xml` is shipped too) | tested: expressions, `out`/`log`, tables, `nil`, errors; reload untested |
 
-## Dateien
+The `DevTools:*` examples are RAID-specific (DevTools-RAID). In PD2 every heist start is
+its own `exec`, so a reload works differently there.
 
-| Datei | Rolle |
+## Files
+
+| File | Role |
 | --- | --- |
-| `supermod.xml` / `mod.txt` | Post-Hook auf `lib/setups/setup` (RAID / PD2) |
-| `LuaDebugAPI.lua` | Polling, Ausfuehrung, Serialisierung |
-| `ldb` | Shell-Client |
-| `io/` | `cmd.lua`, `res.txt` (Laufzeit, nicht versionieren) |
+| `supermod.xml` / `mod.txt` | post-hook on `lib/setups/setup` (RAID / PD2) |
+| `LuaDebugAPI.lua` | polling, execution, serialization |
+| `ldb` | shell client |
+| `io/` | `cmd.lua`, `res.txt` (runtime, not versioned) |
