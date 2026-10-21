@@ -20,7 +20,6 @@ Examples:
 ldb 'game_state_machine:current_state_name()'   # -> OK "menu_main"
 ldb 'managers.player:player_unit():position()'
 ldb 'out("hi"); log("x"); return {a=1}, "s"'
-ldb 'DevTools:reset_menu()'                      # Lua reload, RAID + DevTools-RAID (see below)
 ```
 
 `ldb` is a POSIX shell script. On Windows, write `io/cmd.lua` and read `io/res.txt`
@@ -59,26 +58,12 @@ Serialization: tables up to depth 3, at most 200 entries per table, cycles as
 `<cycle>`, userdata (Vector3, Unit, Idstring, ...) via `tostring`. Total output is
 capped at 200000 characters (`<truncated>`). Limits: `L.max_*` in `LuaDebugAPI.lua`.
 
-## Lua reload
-
-A reload (`DevTools:reset_menu()`, `reset_server()`, F10 with DevTools-RAID) creates a
-new Lua state. The triggering command may get no answer (timeout) or an answer sent
-before the state switch (`OK ` in testing). The mod reloads itself and is reachable
-again after a few seconds:
-
-```
-ldb 'DevTools:reset_menu()'; until ldb '1' 2>/dev/null; do :; done
-```
-
 ## Games
 
 | Game | Definition | Status |
 | --- | --- | --- |
-| RAID: WW2 | `supermod.xml` | tested: expressions, `out`/`log`, tables, `nil`, errors, Lua reload |
-| PAYDAY 2 | `mod.txt` (`supermod.xml` is shipped too) | tested: expressions, `out`/`log`, tables, `nil`, errors; reload untested |
-
-The `DevTools:*` examples are RAID-specific (DevTools-RAID). In PD2 every heist start is
-its own `exec`, so a reload works differently there.
+| RAID: WW2 | `supermod.xml` | tested: expressions, `out`/`log`, tables, `nil`, errors |
+| PAYDAY 2 | `mod.txt` (`supermod.xml` is shipped too) | tested: expressions, `out`/`log`, tables, `nil`, errors |
 
 ## Files
 
