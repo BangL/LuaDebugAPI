@@ -120,13 +120,19 @@ function L.poll()
 	L.write(ok and r or "ERR internal: " .. tostring(r))
 end
 
-Hooks:PostHook(Setup, "update", "LuaDebugAPI_update", function(self, t, dt)
+local function tick(self, t, dt)
 	t_acc = t_acc + (dt or 0)
 	if t_acc < L.interval then
 		return
 	end
 	t_acc = 0
 	L.poll()
-end)
+end
+
+Hooks:PostHook(Setup, "update", "LuaDebugAPI_update", tick)
+-- the paused game (e.g. the pause menu in singleplayer) only runs paused_update
+if Setup.paused_update then
+	Hooks:PostHook(Setup, "paused_update", "LuaDebugAPI_paused_update", tick)
+end
 
 log("[LuaDebugAPI] ready: " .. L.dir)

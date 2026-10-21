@@ -28,7 +28,7 @@ yourself (see Protocol).
 ## Protocol
 
 1. The client writes `io/cmd.lua` (atomically: write `cmd.tmp`, then `mv`).
-2. The mod polls every 0.05 s (post-hook on `Setup:update`, runs in menu and in game),
+2. The mod polls every 0.05 s (post-hooks on `Setup:update` and `Setup:paused_update`, so it also runs in the menu, in game and while the game is paused),
    reads and deletes `cmd.lua` and executes the chunk.
 3. It writes `io/res.txt` (atomically via `res.txt.tmp`). The client reads and deletes it.
 
@@ -70,6 +70,7 @@ capped at 200000 characters (`<truncated>`). Limits: `L.max_*` in `LuaDebugAPI.l
 | File | Role |
 | --- | --- |
 | `supermod.xml` / `mod.txt` | post-hook on `lib/setups/setup` (RAID / PD2) |
+| `LICENSE` | MIT |
 | `LuaDebugAPI.lua` | polling, execution, serialization |
 | `ldb` | shell client |
 | `io/` | `cmd.lua`, `res.txt` (runtime, not versioned) |

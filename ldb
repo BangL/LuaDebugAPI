@@ -10,4 +10,4 @@ while [ $n -gt 0 ]; do
 	sleep 0.05; n=$((n-1))
 done
 rm -f "$d/cmd.lua"
-echo "TIMEOUT (Spiel laeuft nicht / Mod nicht geladen?)" >&2; exit 1
+echo "TIMEOUT (game not running / mod not loaded?)" >&2; exit 1
