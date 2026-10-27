@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<mod name="LuaDebugAPI"
+<mod name="LuaDebugAPI" image="icon.png"
 	description="Live debug API: executes Lua from io/cmd.lua in the running session and writes the result to io/res.txt"
 	priority="1000"
 	author="BangL"
