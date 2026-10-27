@@ -4,7 +4,7 @@
 	priority="1000"
 	author="BangL"
 	color="60 160 255"
-	version="0.2">
+	version="0.2.1">
 
 	<updates>
 	    <update identifier="luadebugapi">

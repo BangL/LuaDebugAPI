@@ -6,10 +6,14 @@
 base="$(cd "$(dirname "$0")" && pwd)"
 d="$base/io"
 game="$(cd "$base/../.." && pwd)"
-crash="$game/../../compatdata/414740/pfx/drive_c/users/steamuser/AppData/Local/RAID WW2/crash.txt"
+case "$game" in
+*PAYDAY*) proc='payday2_win32_releas[e]'; appid=218620; appdir="PAYDAY 2" ;;
+*) proc='raid_win64_releas[e]'; appid=414740; appdir="RAID WW2" ;;
+esac
+crash="$game/../../compatdata/$appid/pfx/drive_c/users/steamuser/AppData/Local/$appdir/crash.txt"
 HANG_S=${LDB_HANG:-8}
 
-game_pid() { pgrep -f 'raid_win64_releas[e]' | head -1; }
+game_pid() { pgrep -f "$proc" | head -1; }
 handler_pid() { pgrep -f 'crash_handle[r]' | head -1; }
 hb() { sed -n "s/^$1=//p" "$d/hb.txt" 2>/dev/null; }
 hb_age() { t=$(hb t); [ -n "$t" ] && echo $(( $(date +%s) - t )) || echo -1; }

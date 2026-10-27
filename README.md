@@ -93,6 +93,6 @@ Per frame: three additions. Every 0.1 s: one `io.open` on `cmd.lua`. Every 2 s: 
 `CRASH_TXT`, `HANG` (heartbeat older than `LDB_HANG`, default 8 s), `STATE`, `RELUA`, `HITCH`, `ERR`).
 On TIMEOUT or "GAME NOT RUNNING" a diagnosis (crash / hang / not running) is printed.
 
-Notes: the process/crash detection in `ldb` is RAID-specific (process `raid_win64_release`,
-Proton prefix `compatdata/414740`, job via `managers.raid_job`); on PD2 only the plain
-command mode is tested. The `HANG` detection is untested.
+Notes: `ldb` picks process name and Proton prefix (`compatdata/<appid>`) from the game folder
+name (`PAYDAY` -> PD2, else RAID); the job in the heartbeat uses `managers.raid_job` (`?` on PD2).
+Diagnostics are only tested on RAID. The `HANG` detection is untested.
