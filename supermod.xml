@@ -6,6 +6,11 @@
 	color="60 160 255"
 	version="0.1">
 
+	<updates>
+	    <update identifier="luadebugapi">
+	        <host meta="https://raw.githubusercontent.com/BangL/raid-mods-meta/main/luadebugapi.json"/>
+	    </update>
+	</updates>
 	<hooks>
 		<group script_path="LuaDebugAPI.lua">
 			<post hook_id="lib/setups/setup"/>
