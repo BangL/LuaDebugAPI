@@ -12,6 +12,7 @@ access to `io/` can control the game. For development only.
 mods/LuaDebugAPI/ldb '<lua code>'
 mods/LuaDebugAPI/ldb -f script.lua
 LDB_TIMEOUT=30 mods/LuaDebugAPI/ldb '...'   # timeout in s, default 10
+mods/LuaDebugAPI/ldb --status | --errors | --watch   # see Diagnostics
 ```
 
 Examples:
@@ -28,7 +29,7 @@ yourself (see Protocol).
 ## Protocol
 
 1. The client writes `io/cmd.lua` (atomically: write `cmd.tmp`, then `mv`).
-2. The mod polls every 0.05 s (post-hooks on `Setup:update` and `Setup:paused_update`, so it also runs in the menu, in game and while the game is paused),
+2. The mod polls every 0.1 s (post-hooks on `Setup:update` and `Setup:paused_update`, so it also runs in the menu, in game and while the game is paused),
    reads and deletes `cmd.lua` and executes the chunk.
 3. It writes `io/res.txt` (atomically via `res.txt.tmp`). The client reads and deletes it.
 
@@ -71,6 +72,27 @@ capped at 200000 characters (`<truncated>`). Limits: `L.max_*` in `LuaDebugAPI.l
 | --- | --- |
 | `supermod.xml` / `mod.txt` | post-hook on `lib/setups/setup` (RAID / PD2) |
 | `LICENSE` | MIT |
-| `LuaDebugAPI.lua` | polling, execution, serialization |
-| `ldb` | shell client |
-| `io/` | `cmd.lua`, `res.txt` (runtime, not versioned) |
+| `LuaDebugAPI.lua` | polling, execution, serialization, heartbeat, error log |
+| `ldb` | shell client (commands, `--status`, `--errors`, `--watch`) |
+| `io/` | runtime files, not versioned: `cmd.lua`, `res.txt`, `hb.txt`, `errors.txt`, `last_cmd.txt`, `running`, `.err_off` |
+
+## Diagnostics (always-on, cheap)
+
+Per frame: three additions. Every 0.1 s: one `io.open` on `cmd.lua`. Every 2 s: heartbeat file.
+`log()` is wrapped with two plain `find`s.
+
+| File | Content |
+| --- | --- |
+| `io/hb.txt` | heartbeat (`t`, `session`, `frames`, `dt_avg`, `dt_max` over the last 2 s, `state`, `level`, `job`, `pos`) |
+| `io/errors.txt` | `log()` lines containing "rror" / tracebacks, appended, truncated at 200 kB |
+| `io/last_cmd.txt` | last command (journal; which command killed the game) |
+| `io/running` | exists while a command runs; if present at load -> `OK RELOADED` is written to `res.txt` |
+
+`ldb` options: `--status` (process, heartbeat, crash handler, `crash.txt` summary), `--errors`
+(new errors since last call), `--watch` (event stream: `PROCESS_START/EXIT`, `CRASH_HANDLER`,
+`CRASH_TXT`, `HANG` (heartbeat older than `LDB_HANG`, default 8 s), `STATE`, `RELUA`, `HITCH`, `ERR`).
+On TIMEOUT or "GAME NOT RUNNING" a diagnosis (crash / hang / not running) is printed.
+
+Notes: the process/crash detection in `ldb` is RAID-specific (process `raid_win64_release`,
+Proton prefix `compatdata/414740`, job via `managers.raid_job`); on PD2 only the plain
+command mode is tested. The `HANG` detection is untested.

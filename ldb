@@ -1,6 +1,97 @@
 #!/bin/sh
-# usage: ldb '<lua code>' | ldb -f file.lua   (timeout via LDB_TIMEOUT, default 10s)
-d="$(cd "$(dirname "$0")" && pwd)/io"
+# ldb '<lua code>' | ldb -f file.lua      run Lua in the game (timeout: LDB_TIMEOUT, default 10s)
+# ldb --status                            process / heartbeat / crash diagnosis
+# ldb --errors                            Lua errors logged since the last call
+# ldb --watch                             event stream (crash, hang, state, errors, hitches), runs until killed
+base="$(cd "$(dirname "$0")" && pwd)"
+d="$base/io"
+game="$(cd "$base/../.." && pwd)"
+crash="$game/../../compatdata/414740/pfx/drive_c/users/steamuser/AppData/Local/RAID WW2/crash.txt"
+HANG_S=${LDB_HANG:-8}
+
+game_pid() { pgrep -f 'raid_win64_releas[e]' | head -1; }
+handler_pid() { pgrep -f 'crash_handle[r]' | head -1; }
+hb() { sed -n "s/^$1=//p" "$d/hb.txt" 2>/dev/null; }
+hb_age() { t=$(hb t); [ -n "$t" ] && echo $(( $(date +%s) - t )) || echo -1; }
+mtime() { stat -c %Y "$1" 2>/dev/null || echo 0; }
+
+crash_info() {
+	# fresh = newer than the last heartbeat, or (no heartbeat) younger than 10 min
+	ref=$(hb t); [ -n "$ref" ] && ref=$((ref - 2)) || ref=$(( $(date +%s) - 600 ))
+	if [ -f "$crash" ] && [ "$(mtime "$crash")" -ge "$ref" ]; then
+		echo "crash.txt ($(date -d @"$(mtime "$crash")" +%T)):"
+		grep -v -e '(???)' -e '^-*$' "$crash" | grep . | head -c 1200; echo
+		return 0
+	fi
+	return 1
+}
+
+diagnose() {
+	gp=$(game_pid); hp=$(handler_pid); age=$(hb_age)
+	if [ -z "$gp" ]; then
+		echo "DIAG: game not running (heartbeat age ${age}s)"
+	elif [ -n "$hp" ]; then
+		echo "DIAG: CRASH - crash handler open (pid $hp), game pid $gp"
+	elif [ "$age" -ge 0 ] && [ "$age" -gt "$HANG_S" ]; then
+		echo "DIAG: HANG - process alive (pid $gp, cpu $(ps -o %cpu= -p "$gp" | tr -d ' ')%), heartbeat frozen ${age}s, state=$(hb state)"
+	elif [ "$age" -lt 0 ]; then
+		echo "DIAG: process alive (pid $gp) but no heartbeat - mod not loaded / still starting"
+	else
+		echo "DIAG: game alive, heartbeat ${age}s old (state=$(hb state)); command just slow or blocked"
+	fi
+	[ -f "$d/running" ] && { echo "last command:"; sed 1d "$d/last_cmd.txt" | head -c 500; echo; }
+	crash_info
+}
+
+errors() {
+	f="$d/errors.txt"; o="$d/.err_off"
+	[ -f "$f" ] || return 0
+	off=$(cat "$o" 2>/dev/null || echo 0); sz=$(wc -c < "$f")
+	[ "$sz" -lt "$off" ] && off=0
+	tail -c +$((off + 1)) "$f"
+	echo "$sz" > "$o"
+}
+
+case "$1" in
+--status)
+	gp=$(game_pid)
+	echo "pid=${gp:-none} handler=$(handler_pid || true) hb_age=$(hb_age)s"
+	[ -f "$d/hb.txt" ] && cat "$d/hb.txt"
+	diagnose
+	exit 0 ;;
+--errors)
+	errors; exit 0 ;;
+--watch)
+	pg=; st=; ses=; hung=0; ch=; ct=$(mtime "$crash"); eo=$(cat "$d/errors.txt" 2>/dev/null | wc -c)
+	while :; do
+		gp=$(game_pid); hp=$(handler_pid)
+		[ "$gp" != "$pg" ] && { [ -n "$gp" ] && echo "PROCESS_START pid=$gp" || echo "PROCESS_EXIT"; pg=$gp; }
+		[ "$hp" != "$ch" ] && { [ -n "$hp" ] && echo "CRASH_HANDLER pid=$hp"; ch=$hp; }
+		c=$(mtime "$crash")
+		if [ "$c" != "$ct" ]; then ct=$c; echo "CRASH_TXT"; grep -v -e '(???)' -e '^-*$' "$crash" | grep . | head -c 1200; echo; fi
+		if [ -n "$gp" ]; then
+			age=$(hb_age)
+			if [ "$age" -gt "$HANG_S" ] && [ -z "$hp" ]; then
+				[ $hung = 0 ] && { echo "HANG heartbeat frozen ${age}s (state=$(hb state))"; hung=1; }
+			elif [ $hung = 1 ] && [ "$age" -ge 0 ]; then echo "HANG_END"; hung=0; fi
+			s="$(hb state)/$(hb level)"
+			[ "$s" != "$st" ] && [ "$s" != "/" ] && { echo "STATE $st -> $s"; st=$s; }
+			n=$(hb session)
+			[ -n "$n" ] && [ "$n" != "$ses" ] && { [ -n "$ses" ] && echo "RELUA new Lua session"; ses=$n; }
+			m=$(hb dt_max)
+			[ -n "$m" ] && awk "BEGIN{exit !($m > 0.25)}" && echo "HITCH dt_max=${m}s"
+		fi
+		if [ -f "$d/errors.txt" ]; then
+			sz=$(wc -c < "$d/errors.txt"); [ "$sz" -lt "$eo" ] && eo=0
+			[ "$sz" -gt "$eo" ] && { tail -c +$((eo + 1)) "$d/errors.txt" | sed 's/^/ERR /'; eo=$sz; }
+		fi
+		sleep 1
+	done ;;
+esac
+
+if [ -z "$(game_pid)" ]; then
+	echo "GAME NOT RUNNING"; diagnose >&2; exit 2
+fi
 if [ "$1" = "-f" ]; then cp "$2" "$d/cmd.tmp"; else printf '%s' "$1" > "$d/cmd.tmp"; fi
 rm -f "$d/res.txt"
 mv "$d/cmd.tmp" "$d/cmd.lua"
@@ -10,4 +101,4 @@ while [ $n -gt 0 ]; do
 	sleep 0.05; n=$((n-1))
 done
 rm -f "$d/cmd.lua"
-echo "TIMEOUT (game not running / mod not loaded?)" >&2; exit 1
+echo "TIMEOUT"; diagnose; exit 1
