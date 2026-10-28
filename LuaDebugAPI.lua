@@ -19,14 +19,23 @@ L.max_items = 200
 L.max_len = 200000
 L.hb_file = L.dir .. "hb.txt"
 L.hb_interval = 2
+-- the heartbeat only runs while ldb asked for it recently (hb_want holds the unix time of the request)
+L.hb_want = L.dir .. "hb_want"
+L.hb_window = 60
 L.err_file = L.dir .. "errors.txt"
 L.err_max = 200000
 L.last_cmd = L.dir .. "last_cmd.txt"
 L.running = L.dir .. "running"
 L.session = os.time()
 
+-- io/ is not shipped; on Linux it may be a link to tmpfs (setup-tmpfs.sh)
+if file and file.DirectoryExists and not file.DirectoryExists(ModPath .. "io") then
+	file.CreateDirectory(ModPath .. "io")
+end
+
 local t_acc = 0
 local hb_acc = 0
+local hb_since = math.huge
 local hb_frames, hb_sum, hb_max = 0, 0, 0
 local hb_total = 0
 
@@ -171,6 +180,16 @@ function L.heartbeat()
 	os.rename(tmp, L.hb_file)
 end
 
+function L.hb_wanted()
+	local f = io.open(L.hb_want, "rb")
+	if not f then
+		return false
+	end
+	local t = tonumber(f:read("*a"))
+	f:close()
+	return t ~= nil and os.time() - t <= L.hb_window
+end
+
 -- error ring: log() lines that look like errors, appended to io/errors.txt
 function L.log_error(text)
 	local f = io.open(L.err_file, "ab")
@@ -210,9 +229,19 @@ local function tick(self, t, dt)
 		hb_max = dt
 	end
 	hb_acc = hb_acc + dt
-	if hb_acc >= L.hb_interval then
+	if hb_acc >= 1 then
 		hb_acc = 0
-		L.heartbeat()
+		if L.hb_wanted() then
+			-- first beat right after a request, then every hb_interval
+			hb_since = hb_since + 1
+			if hb_since >= L.hb_interval then
+				hb_since = 0
+				L.heartbeat()
+			end
+		else
+			hb_since = math.huge
+			hb_frames, hb_sum, hb_max = 0, 0, 0
+		end
 	end
 	t_acc = t_acc + dt
 	if t_acc < L.interval then

@@ -5,6 +5,9 @@
 # ldb --watch                             event stream (crash, hang, state, errors, hitches), runs until killed
 base="$(cd "$(dirname "$0")" && pwd)"
 d="$base/io"
+# io/ may link to tmpfs (setup-tmpfs.sh); the target is gone after a reboot
+[ -L "$d" ] && [ ! -d "$d" ] && mkdir -p "$(readlink "$d")"
+[ -e "$d" ] || mkdir "$d"
 game="$(cd "$base/../.." && pwd)"
 case "$game" in
 *PAYDAY*) proc='payday2_win32_releas[e]'; appid=218620; appdir="PAYDAY 2" ;;
@@ -18,6 +21,12 @@ handler_pid() { pgrep -f 'crash_handle[r]' | head -1; }
 hb() { sed -n "s/^$1=//p" "$d/hb.txt" 2>/dev/null; }
 hb_age() { t=$(hb t); [ -n "$t" ] && echo $(( $(date +%s) - t )) || echo -1; }
 mtime() { stat -c %Y "$1" 2>/dev/null || echo 0; }
+# the mod only writes the heartbeat while requested (hb_want, valid 60 s)
+want_hb() { date +%s > "$d/hb_want"; }
+fresh_hb() {
+	want_hb; w=$(cat "$d/hb_want"); n=30
+	while [ $n -gt 0 ]; do t=$(hb t); [ "${t:-0}" -ge "$w" ] && break; sleep 0.1; n=$((n-1)); done
+}
 
 crash_info() {
 	# fresh = newer than the last heartbeat, or (no heartbeat) younger than 10 min
@@ -59,6 +68,7 @@ errors() {
 case "$1" in
 --status)
 	gp=$(game_pid)
+	[ -n "$gp" ] && fresh_hb
 	echo "pid=${gp:-none} handler=$(handler_pid || true) hb_age=$(hb_age)s"
 	[ -f "$d/hb.txt" ] && cat "$d/hb.txt"
 	diagnose
@@ -67,8 +77,10 @@ case "$1" in
 	errors; exit 0 ;;
 --watch)
 	pg=; st=; ses=; hung=0; ch=; ct=$(mtime "$crash"); eo=$(cat "$d/errors.txt" 2>/dev/null | wc -c)
+	[ -n "$(game_pid)" ] && fresh_hb
 	while :; do
 		gp=$(game_pid); hp=$(handler_pid)
+		[ -n "$gp" ] && want_hb
 		[ "$gp" != "$pg" ] && { [ -n "$gp" ] && echo "PROCESS_START pid=$gp" || echo "PROCESS_EXIT"; pg=$gp; }
 		[ "$hp" != "$ch" ] && { [ -n "$hp" ] && echo "CRASH_HANDLER pid=$hp"; ch=$hp; }
 		c=$(mtime "$crash")
@@ -96,6 +108,9 @@ esac
 if [ -z "$(game_pid)" ]; then
 	echo "GAME NOT RUNNING"; diagnose >&2; exit 2
 fi
+# stale or missing heartbeat (none requested lately): wait for a fresh one, the diagnosis on TIMEOUT relies on it
+age=$(hb_age)
+if [ "$age" -lt 0 ] || [ "$age" -gt 3 ]; then fresh_hb; else want_hb; fi
 if [ "$1" = "-f" ]; then cp "$2" "$d/cmd.tmp" || exit 2; else printf '%s' "$1" > "$d/cmd.tmp"; fi
 rm -f "$d/res.txt"
 mv "$d/cmd.tmp" "$d/cmd.lua"

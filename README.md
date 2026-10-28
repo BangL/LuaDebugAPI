@@ -74,11 +74,15 @@ capped at 200000 characters (`<truncated>`). Limits: `L.max_*` in `LuaDebugAPI.l
 | `LICENSE` | MIT |
 | `LuaDebugAPI.lua` | polling, execution, serialization, heartbeat, error log |
 | `ldb` | shell client (commands, `--status`, `--errors`, `--watch`) |
-| `io/` | runtime files, not versioned: `cmd.lua`, `res.txt`, `hb.txt`, `errors.txt`, `last_cmd.txt`, `running`, `.err_off` |
+| `setup-tmpfs.sh` | Linux: moves `io/` to tmpfs (see below) |
+| `io/` | runtime files, created by the mod, not versioned: `cmd.lua`, `res.txt`, `hb.txt`, `hb_want`, `errors.txt`, `last_cmd.txt`, `running`, `.err_off` |
 
 ## Diagnostics (always-on, cheap)
 
-Per frame: three additions. Every 0.1 s: one `io.open` on `cmd.lua`. Every 2 s: heartbeat file.
+Per frame: three additions. Every 0.1 s: one `io.open` on `cmd.lua`. Every second: one read of
+`hb_want`. The heartbeat file is only written (every 2 s) while `ldb` requested it within the last
+60 s: every `ldb` call writes the request, `--watch` renews it every second, `--status` waits up
+to 3 s for a fresh beat. Without `ldb` the mod writes nothing, except `errors.txt` on errors.
 `log()` is wrapped with two plain `find`s.
 
 | File | Content |
@@ -96,3 +100,11 @@ On TIMEOUT or "GAME NOT RUNNING" a diagnosis (crash / hang / not running) is pri
 Notes: `ldb` picks process name and Proton prefix (`compatdata/<appid>`) from the game folder
 name (`PAYDAY` -> PD2, else RAID); the job in the heartbeat uses `managers.raid_job` (`?` on PD2).
 Diagnostics are only tested on RAID. The `HANG` detection is untested.
+
+## Linux: `io/` in RAM
+
+`./setup-tmpfs.sh` turns `io/` into a link to `/dev/shm/LuaDebugAPI-<raid|pd2>` (tmpfs; not `$XDG_RUNTIME_DIR`,
+which the Steam runtime container hides from the game),
+so the IPC files never hit the SSD (Wine follows the link). Existing files are moved along;
+`--undo` restores a normal folder. tmpfs survives a game crash, not a reboot: `ldb` recreates
+the missing target, a game started before that just writes nothing until then.
