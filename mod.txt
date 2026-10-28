@@ -4,6 +4,14 @@
 	"author": "BangL",
 	"version": "0.3.0",
 	"priority": 1000,
+	"updates": [
+		{
+			"identifier": "luadebugapi",
+			"host": {
+				"meta": "https://raw.githubusercontent.com/BangL/raid-mods-meta/main/luadebugapi.json"
+			}
+		}
+	],
 	"hooks": [
 		{ "hook_id": "lib/setups/setup", "script_path": "LuaDebugAPI.lua" }
 	]
