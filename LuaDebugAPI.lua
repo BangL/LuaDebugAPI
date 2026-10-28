@@ -1,5 +1,6 @@
 -- Live debug API (file IPC).
--- Client writes io/cmd.lua (atomically via rename), mod executes it, writes io/res.txt.
+-- Client writes io-<game>/cmd.lua (atomically via rename), mod executes it, writes io-<game>/res.txt.
+-- One folder per game, so a mod folder shared by RAID and PD2 (symlink) keeps them apart.
 -- Chunk env: _G; extra locals: out(...) appends to the result. A chunk starting
 -- with an expression is tried as "return <code>" first.
 
@@ -10,7 +11,8 @@ LuaDebugAPI = LuaDebugAPI or {}
 local L = LuaDebugAPI
 L.loaded = true
 
-L.dir = ModPath .. "io/"
+L.game = blt and blt.blt_info and (blt.blt_info() or {}).game == "raid" and "raid" or "pd2"
+L.dir = ModPath .. "io-" .. L.game .. "/"
 L.cmd = L.dir .. "cmd.lua"
 L.res = L.dir .. "res.txt"
 L.interval = 0.1
@@ -28,9 +30,9 @@ L.last_cmd = L.dir .. "last_cmd.txt"
 L.running = L.dir .. "running"
 L.session = os.time()
 
--- io/ is not shipped; on Linux it may be a link to tmpfs (setup-tmpfs.sh)
-if file and file.DirectoryExists and not file.DirectoryExists(ModPath .. "io") then
-	file.CreateDirectory(ModPath .. "io")
+-- io-<game>/ is not shipped; on Linux it may be a link to tmpfs (setup-tmpfs.sh)
+if file and file.DirectoryExists and not file.DirectoryExists(ModPath .. "io-" .. L.game) then
+	file.CreateDirectory(ModPath .. "io-" .. L.game)
 end
 
 local t_acc = 0
@@ -190,7 +192,7 @@ function L.hb_wanted()
 	return t ~= nil and os.time() - t <= L.hb_window
 end
 
--- error ring: log() lines that look like errors, appended to io/errors.txt
+-- error ring: log() lines that look like errors, appended to io-<game>/errors.txt
 function L.log_error(text)
 	local f = io.open(L.err_file, "ab")
 	if not f then

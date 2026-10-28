@@ -4,7 +4,7 @@ Live debug API for **RAID: World War II** and **PAYDAY 2** (both DIESEL, SuperBL
 Executes Lua code in the running game session and returns the result via file IPC.
 
 **Warning:** executes arbitrary code without any authentication. Any process with write
-access to `io/` can control the game. For development only.
+access to `io-<game>/` can control the game. For development only.
 
 ## Usage
 
@@ -23,15 +23,18 @@ ldb 'managers.player:player_unit():position()'
 ldb 'out("hi"); log("x"); return {a=1}, "s"'
 ```
 
-`ldb` is a POSIX shell script. On Windows, write `io/cmd.lua` and read `io/res.txt`
+Call `ldb` by the path inside the game folder you want to reach (`RAID World War II/mods/...` or
+`PAYDAY 2/mods/...`): the game is taken from that path, also when the mod folder is a symlink.
+
+`ldb` is a POSIX shell script. On Windows, write `io-<game>/cmd.lua` and read `io-<game>/res.txt`
 yourself (see Protocol).
 
 ## Protocol
 
-1. The client writes `io/cmd.lua` (atomically: write `cmd.tmp`, then `mv`).
+1. The client writes `io-<game>/cmd.lua` (atomically: write `cmd.tmp`, then `mv`).
 2. The mod polls every 0.1 s (post-hooks on `Setup:update` and `Setup:paused_update`, so it also runs in the menu, in game and while the game is paused),
    reads and deletes `cmd.lua` and executes the chunk.
-3. It writes `io/res.txt` (atomically via `res.txt.tmp`). The client reads and deletes it.
+3. It writes `io-<game>/res.txt` (atomically via `res.txt.tmp`). The client reads and deletes it.
 
 One command at a time: `ldb` deletes a stale `res.txt` before sending.
 
@@ -64,7 +67,11 @@ capped at 200000 characters (`<truncated>`). Limits: `L.max_*` in `LuaDebugAPI.l
 | Game | Definition | Status |
 | --- | --- | --- |
 | RAID: WW2 | `supermod.xml` | tested: expressions, `out`/`log`, tables, `nil`, errors |
-| PAYDAY 2 | `mod.txt` (`supermod.xml` is shipped too) | tested: expressions, `out`/`log`, tables, `nil`, errors |
+| PAYDAY 2 | `mod.txt` (`supermod.xml` is shipped too, its hooks are skipped by a load guard) | tested with 0.1: expressions, `out`/`log`, tables, `nil`, errors; 0.3.x untested |
+
+One checkout can serve both games: link the mod folder into the other game's `mods/`
+(e.g. `PAYDAY 2/mods/LuaDebugAPI` -> `RAID World War II/mods/LuaDebugAPI`). Each game uses its own
+`io-<game>/` (`io-raid/`, `io-pd2/`), so both can run at the same time.
 
 ## Files
 
@@ -74,8 +81,8 @@ capped at 200000 characters (`<truncated>`). Limits: `L.max_*` in `LuaDebugAPI.l
 | `LICENSE` | MIT |
 | `LuaDebugAPI.lua` | polling, execution, serialization, heartbeat, error log |
 | `ldb` | shell client (commands, `--status`, `--errors`, `--watch`) |
-| `setup-tmpfs.sh` | Linux: moves `io/` to tmpfs (see below) |
-| `io/` | runtime files, created by the mod, not versioned: `cmd.lua`, `res.txt`, `hb.txt`, `hb_want`, `errors.txt`, `last_cmd.txt`, `running`, `.err_off` |
+| `setup-tmpfs.sh` | Linux: moves `io-<game>/` to tmpfs (see below) |
+| `io-<game>/` | runtime files (`<game>` = `raid` / `pd2` from `blt.blt_info().game`, so one mod folder can be linked into both games), created by the mod, not versioned: `cmd.lua`, `res.txt`, `hb.txt`, `hb_want`, `errors.txt`, `last_cmd.txt`, `running`, `.err_off` |
 
 ## Diagnostics (always-on, cheap)
 
@@ -87,24 +94,26 @@ to 3 s for a fresh beat. Without `ldb` the mod writes nothing, except `errors.tx
 
 | File | Content |
 | --- | --- |
-| `io/hb.txt` | heartbeat (`t`, `session`, `frames`, `dt_avg`, `dt_max` over the last 2 s, `state`, `level`, `job`, `pos`) |
-| `io/errors.txt` | `log()` lines containing "rror" / tracebacks, appended, truncated at 200 kB |
-| `io/last_cmd.txt` | last command (journal; which command killed the game) |
-| `io/running` | exists while a command runs; if present at load -> `OK RELOADED` is written to `res.txt` |
+| `io-<game>/hb.txt` | heartbeat (`t`, `session`, `frames`, `dt_avg`, `dt_max` over the last 2 s, `state`, `level`, `job`, `pos`) |
+| `io-<game>/errors.txt` | `log()` lines containing "rror" / tracebacks, appended, truncated at 200 kB |
+| `io-<game>/last_cmd.txt` | last command (journal; which command killed the game) |
+| `io-<game>/running` | exists while a command runs; if present at load -> `OK RELOADED` is written to `res.txt` |
 
 `ldb` options: `--status` (process, heartbeat, crash handler, `crash.txt` summary), `--errors`
 (new errors since last call), `--watch` (event stream: `PROCESS_START/EXIT`, `CRASH_HANDLER`,
 `CRASH_TXT`, `HANG` (heartbeat older than `LDB_HANG`, default 8 s), `STATE`, `RELUA`, `HITCH`, `ERR`).
 On TIMEOUT or "GAME NOT RUNNING" a diagnosis (crash / hang / not running) is printed.
 
-Notes: `ldb` picks process name and Proton prefix (`compatdata/<appid>`) from the game folder
-name (`PAYDAY` -> PD2, else RAID); the job in the heartbeat uses `managers.raid_job` (`?` on PD2).
+Notes: `ldb` picks `io-<game>/`, process (`PAYDAY2.exe` / `raid_win64_release.exe`) and Proton
+prefix (`compatdata/<appid>`) from the game folder name in its path (`PAYDAY` -> PD2, else RAID); the job in the heartbeat uses `managers.raid_job` (`?` on PD2).
 Diagnostics are only tested on RAID. The `HANG` detection is untested.
 
-## Linux: `io/` in RAM
+## Linux: `io-<game>/` in RAM
 
-`./setup-tmpfs.sh` turns `io/` into a link to `/dev/shm/LuaDebugAPI-<raid|pd2>` (tmpfs; not `$XDG_RUNTIME_DIR`,
+`./setup-tmpfs.sh` (called by the game's path, like `ldb`) turns `io-<game>/` into a link to `/dev/shm/LuaDebugAPI-<raid|pd2>` (tmpfs; not `$XDG_RUNTIME_DIR`,
 which the Steam runtime container hides from the game),
 so the IPC files never hit the SSD (Wine follows the link). Existing files are moved along;
 `--undo` restores a normal folder. tmpfs survives a game crash, not a reboot: `ldb` recreates
 the missing target, a game started before that just writes nothing until then.
+Before 0.3.1 the folder was `io/`: after updating, run `setup-tmpfs.sh` again (or rename the old
+`io` link to `io-<game>`), otherwise `ldb` creates a plain `io-<game>/` on disk.

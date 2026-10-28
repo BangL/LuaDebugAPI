@@ -1,10 +1,10 @@
 <?xml version="1.0"?>
 <mod name="LuaDebugAPI" image="icon.png"
-	description="Live debug API: executes Lua from io/cmd.lua in the running session and writes the result to io/res.txt"
+	description="Live debug API: executes Lua from cmd.lua in the running session and writes the result to res.txt (folder io-raid/ or io-pd2/)"
 	priority="1000"
 	author="BangL"
 	color="60 160 255"
-	version="0.3.0">
+	version="0.3.1">
 
 	<updates>
 	    <update identifier="luadebugapi">

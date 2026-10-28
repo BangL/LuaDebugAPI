@@ -4,15 +4,15 @@
 # ldb --errors                            Lua errors logged since the last call
 # ldb --watch                             event stream (crash, hang, state, errors, hitches), runs until killed
 base="$(cd "$(dirname "$0")" && pwd)"
-d="$base/io"
-# io/ may link to tmpfs (setup-tmpfs.sh); the target is gone after a reboot
-[ -L "$d" ] && [ ! -d "$d" ] && mkdir -p "$(readlink "$d")"
-[ -e "$d" ] || mkdir "$d"
 game="$(cd "$base/../.." && pwd)"
 case "$game" in
-*PAYDAY*) proc='payday2_win32_releas[e]'; appid=218620; appdir="PAYDAY 2" ;;
-*) proc='raid_win64_releas[e]'; appid=414740; appdir="RAID WW2" ;;
+*PAYDAY*) tag=pd2; proc='PAYDAY2\.ex[e]'; appid=218620; appdir="PAYDAY 2" ;;
+*) tag=raid; proc='raid_win64_releas[e]'; appid=414740; appdir="RAID WW2" ;;
 esac
+d="$base/io-$tag"
+# io-<game>/ may link to tmpfs (setup-tmpfs.sh); the target is gone after a reboot
+[ -L "$d" ] && [ ! -d "$d" ] && mkdir -p "$(readlink "$d")"
+[ -e "$d" ] || mkdir "$d"
 crash="$game/../../compatdata/$appid/pfx/drive_c/users/steamuser/AppData/Local/$appdir/crash.txt"
 HANG_S=${LDB_HANG:-8}
 
