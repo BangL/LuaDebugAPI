@@ -96,7 +96,7 @@ esac
 if [ -z "$(game_pid)" ]; then
 	echo "GAME NOT RUNNING"; diagnose >&2; exit 2
 fi
-if [ "$1" = "-f" ]; then cp "$2" "$d/cmd.tmp"; else printf '%s' "$1" > "$d/cmd.tmp"; fi
+if [ "$1" = "-f" ]; then cp "$2" "$d/cmd.tmp" || exit 2; else printf '%s' "$1" > "$d/cmd.tmp"; fi
 rm -f "$d/res.txt"
 mv "$d/cmd.tmp" "$d/cmd.lua"
 n=$(( ${LDB_TIMEOUT:-10} * 20 ))
